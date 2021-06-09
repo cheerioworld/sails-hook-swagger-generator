@@ -26,7 +26,7 @@ export default async (sails: Sails.Sails, sailsRoutes: Array<Sails.Route>, conte
 
   const specifications = cloneDeep(hookConfig.swagger || {}) as OpenApi.OpenApi;
 
-  const theDefaults = hookConfig.defaults || configurationDefaults;
+  const theDefaults = hookConfig.preferJsonSchemaResponses ? { responses: {} } : hookConfig.defaults || configurationDefaults;
 
   /*
    * parse models and controllers (structures, source Swagger and JSDoc Swagger)
@@ -92,7 +92,7 @@ export default async (sails: Sails.Sails, sailsRoutes: Array<Sails.Route>, conte
   mergeComponents(specifications.components!, /* routesJsDoc, */ models, modelsJsDoc, controllers, controllersJsDoc);
   mergeTags(specifications.tags!, /* routesJsDoc, */ models, modelsJsDoc, controllers, controllersJsDoc, defaultModelTags);
 
-  defaults(specifications.paths, generatePaths(routes, blueprintActionTemplates, theDefaults, specifications, models, sails));
+  defaults(specifications.paths, generatePaths(routes, blueprintActionTemplates, theDefaults, specifications, models, sails, hookConfig.preferJsonSchemaResponses || false));
 
   defaults(specifications.components!.parameters, blueprintParameterTemplates);
 

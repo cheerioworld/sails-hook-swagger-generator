@@ -353,7 +353,7 @@ export const generateSchemas = (models: NameKeyMap<SwaggerSailsModel>): NameKeyM
  */
 export const generatePaths = (routes: SwaggerRouteInfo[], templates: BlueprintActionTemplates,
   defaultsValues: Defaults, specification: OpenApi.OpenApi,
-  models: NameKeyMap<SwaggerSailsModel>, sails: Sails.Sails): OpenApi.Paths => {
+  models: NameKeyMap<SwaggerSailsModel>, sails: Sails.Sails, preferJsonSchemaResponses: boolean): OpenApi.Paths => {
 
   const paths = {};
   const tags = specification.tags!;
@@ -491,14 +491,26 @@ export const generatePaths = (routes: SwaggerRouteInfo[], templates: BlueprintAc
             return;
           }
 
-          let { statusCode, description } = actions2Responses[exitName as keyof Action2Response] || actions2Responses.success;
+          let responseStatusCodeKey = '';
+          if (exit.statusCode !== undefined) {
+            forEach(actions2Responses, (_res, _resKey) => {
+              if (_res.statusCode === exit.statusCode) {
+                responseStatusCodeKey = _resKey;
+              }
+            })
+          }
+
+          //If the exit has statusCode, it get the response name by actions2responses, if not exists get the responsetype and if not exist get the exit name
+          const actionKeyToGet = responseStatusCodeKey || exit.responseType || exitName;
+
+          let { statusCode, description } = actions2Responses[actionKeyToGet as keyof Action2Response] || actions2Responses.success;
           const defaultDescription = description;
           statusCode = exit.statusCode || statusCode;
           description = exit.description || description;
 
           const schema: OpenApi.UpdatedSchema = {
             example: exit.outputExample,
-            ...deriveSwaggerTypeFromExample(exit.outputExample || ''),
+            ...(exit.schema || deriveSwaggerTypeFromExample(exit.outputExample || '')),
             description: description,
           };
 
@@ -523,10 +535,11 @@ export const generatePaths = (routes: SwaggerRouteInfo[], templates: BlueprintAc
 
           if (exitResponses[statusCode]) {
 
-            // this statusCode already exists --> add as alternative if 'oneOf' present (or can be cleanly added)
-            addToContentJsonSchemaOneOfIfDne();
-            defaultOnly[statusCode] = false;
-
+            if (!(preferJsonSchemaResponses && statusCode === '200')) {
+              // this statusCode already exists --> add as alternative if 'oneOf' present (or can be cleanly added)
+              addToContentJsonSchemaOneOfIfDne();
+              defaultOnly[statusCode] = false;
+            }
           } else if(pathEntry.responses[statusCode]) {
 
             // if not exists, check for response defined in source swagger and merge/massage to suit 'application/json' oneOf
@@ -748,6 +761,8 @@ export const generatePaths = (routes: SwaggerRouteInfo[], templates: BlueprintAc
         },
 
         addResultOfArrayOfModels: () => {
+          // if (preferJsonSchemaResponses) return;
+
           defaults(pathEntry.responses, {
             '200': {
               description: subst(template.resultDescription || 'Array of **{globalId}** records'),
@@ -791,11 +806,14 @@ export const generatePaths = (routes: SwaggerRouteInfo[], templates: BlueprintAc
         },
 
         addAssociationResultOfArray: () => {
+          // if(preferJsonSchemaResponses) return;
           const associations = route.model?.associations || [];
           const models = (route.associationAliases || []).map(a => {
             const assoc = associations.find(_assoc => _assoc.alias == a);
             return assoc ? (assoc.collection || assoc.model) : a;
           });
+
+
           defaults(pathEntry.responses, {
             '200': {
               description: subst(template.resultDescription),
@@ -817,6 +835,7 @@ export const generatePaths = (routes: SwaggerRouteInfo[], templates: BlueprintAc
         },
 
         addResultOfModel: () => {
+          // if(preferJsonSchemaResponses) return;
           defaults(pathEntry.responses, {
             '200': {
               description: subst(template.resultDescription || '**{globalId}** record'),
@@ -830,12 +849,14 @@ export const generatePaths = (routes: SwaggerRouteInfo[], templates: BlueprintAc
         },
 
         addResultNotFound: () => {
+          if(preferJsonSchemaResponses && pathEntry.responses['404']) return;
           defaults(pathEntry.responses, {
             '404': { description: subst(template.notFoundDescription || 'Not found'), }
           });
         },
 
         addResultValidationError: () => {
+          if(preferJsonSchemaResponses && pathEntry.responses['400']) return;
           defaults(pathEntry.responses, {
             '400': { description: subst('Validation errors; details in JSON response'), }
           });
@@ -897,11 +918,13 @@ export const generatePaths = (routes: SwaggerRouteInfo[], templates: BlueprintAc
       }
     );
 
-    defaults(
-      pathEntry.responses,
-      defaultsValues.responses,
-      { '500': { description: 'Internal server error' } },
-    );
+    if (!(preferJsonSchemaResponses && pathEntry.responses['500'])) {
+      defaults(
+        pathEntry.responses,
+        defaultsValues.responses,
+        { '500': { description: 'Internal server error' } },
+      );
+    }
 
     // catch the case where defaultTagName not defined
     if (isEqual(pathEntry.tags, [undefined])) pathEntry.tags = [];

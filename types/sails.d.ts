@@ -202,6 +202,7 @@ declare namespace Sails {
       statusCode?: string;
       viewTemplatePath?: string;
       outputExample?: any;
+      schema?: any;
     }
 
     /**

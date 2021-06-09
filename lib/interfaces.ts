@@ -11,6 +11,7 @@ export interface SwaggerGenerator {
   defaults?: Defaults;
   postProcess?: (specification: OpenApi.OpenApi) => void;
   excludeDeprecatedPutBlueprintRoutes?: boolean;
+  preferJsonSchemaResponses?: boolean;
 }
 
 /**
